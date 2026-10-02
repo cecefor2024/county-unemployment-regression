@@ -1,0 +1,64 @@
+---
+title: "Project 1 R file"
+author: "Chelsea Oliveira"
+date: "2026-10-02"
+output: pdf_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(tidyr)
+library(readxl)
+library(readr)
+library(dplyr)
+
+setwd("/Users/chelseaoliveira/Downloads")
+
+edu_raw <- read_csv("Education70_23.csv", skip = 3)
+unemp_raw <- read_csv("Unemployment2023_project1.csv")
+
+colnames(edu_raw)
+
+edu_clean <- edu_raw |> select(`FIPS Code`, pct_no_hs = `Percent of adults who are not high school graduates, 2019-23`, pct_yes_hs = `Percent of adults who are high school graduates (or equivalent), 2019-23`, pct_some_uni = `Some college or associate degree, 2019-23`, pct_full_uni = `Percent of adults with a bachelor's degree or higher, 2019-23`) |> rename(FIPS_Code = `FIPS Code`)
+edu_clean <- edu_clean |> filter(nchar(FIPS_Code) ==5, !grepl("000$", FIPS_Code)) |> filter(!is.na(pct_full_uni))
+
+class(edu_clean$FIPS_Code)
+
+unemp_raw <- read_csv("Unemployment2023_project1.csv")
+
+unemp_clean <- unemp_raw |> filter(nchar(FIPS_Code) == 5, !grepl("000$", FIPS_Code)) |> select(FIPS_Code, State, Area_Name, Rural_Urban_Continuum_Code_2023, Unemployment_rate_2023) |> rename(rucc = Rural_Urban_Continuum_Code_2023, unemp_rate = Unemployment_rate_2023) |> filter(!is.na(rucc), !is.na(unemp_rate))
+
+class(unemp_clean$FIPS_Code)
+
+merged_clean <- unemp_clean |> left_join(edu_clean, by = "FIPS_Code")
+merged_clean <- merged_clean |> filter(!is.na(pct_full_uni), !is.na(pct_no_hs))
+
+model <- lm(unemp_rate ~ rucc + pct_full_uni, data = merged_clean)
+#summary(model)
+#plot(model)
+
+"Median_Household_Income_2022" %in% colnames(unemp_raw)
+
+unemp_clean <- unemp_raw |> filter(nchar(FIPS_Code) == 5, !grepl("000$", FIPS_Code)) |> select(FIPS_Code, State, Area_Name, rucc = Rural_Urban_Continuum_Code_2023, unemp_rate = Unemployment_rate_2023, med_income = Median_Household_Income_2022) |> mutate(med_income = as.numeric(gsub(",", " ", med_income))) |> filter(!is.na(rucc), !is.na(unemp_rate), !is.na(med_income))
+
+merged_clean <- unemp_clean |> left_join(edu_clean, by = "FIPS_Code") |> filter(!is.na(pct_full_uni), !is.na(pct_no_hs), !is.na(med_income)) |> distinct(FIPS_Code, .keep_all = TRUE)
+colnames(merged_clean)
+
+merged_clean |> select(unemp_rate, rucc, pct_full_uni, pct_no_hs, med_income) |> gather() |> ggplot(aes(value)) + geom_histogram(bins = 30, fill = "lightblue") + facet_wrap(~key, scales = "free") + theme_dark()
+ggplot(merged_clean, aes(x= rucc, y = unemp_rate)) + geom_point(alpha = 0.3) + geom_smooth(method = "lm", se = TRUE) + labs(title = "Unemployment and Rurality") + theme_dark()
+
+model1 <- lm(unemp_rate ~ rucc, data = merged_clean)
+summary(model1)
+plot(model1)
+
+model2 <- lm(unemp_rate ~ rucc + pct_full_uni + med_income, data = merged_clean)
+summary(model2)
+plot(model2)
+
+merged_clean$log_unemp_rate <- log(merged_clean$unemp_rate)
+model3 <- lm(log_unemp_rate ~ rucc + pct_full_uni + med_income, data=merged_clean)
+summary(model3)
+plot(model3)
+```
